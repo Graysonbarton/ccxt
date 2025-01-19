@@ -207,7 +207,7 @@ class tokocrypto extends Exchange {
                     'maker' => $this->parse_number('0.0075'), // 0.1% trading fee, zero fees for all trading pairs before November 1
                 ),
             ),
-            'precisionMode' => DECIMAL_PLACES,
+            'precisionMode' => TICK_SIZE,
             'options' => array(
                 // 'fetchTradesMethod' => 'binanceGetTrades', // binanceGetTrades, binanceGetAggTrades
                 'createMarketBuyOrderRequiresPrice' => true,
@@ -601,7 +601,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_time($params = array ()) {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#check-server-time
+         *
          * fetches the current integer timestamp in milliseconds from the exchange server
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {int} the current integer timestamp in milliseconds from the exchange server
@@ -615,7 +617,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_markets($params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#get-all-supported-trading-$symbol
+         *
          * retrieves $data on all markets for tokocrypto
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {array[]} an array of objects representing $market $data
@@ -713,10 +717,10 @@ class tokocrypto extends Exchange {
                 'strike' => null,
                 'optionType' => null,
                 'precision' => array(
-                    'amount' => $this->safe_integer($market, 'quantityPrecision'),
-                    'price' => $this->safe_integer($market, 'pricePrecision'),
-                    'base' => $this->safe_integer($market, 'baseAssetPrecision'),
-                    'quote' => $this->safe_integer($market, 'quotePrecision'),
+                    'amount' => $this->parse_number($this->parse_precision($this->safe_string($market, 'quantityPrecision'))),
+                    'price' => $this->parse_number($this->parse_precision($this->safe_string($market, 'pricePrecision'))),
+                    'base' => $this->parse_number($this->parse_precision($this->safe_string($market, 'baseAssetPrecision'))),
+                    'quote' => $this->parse_number($this->parse_precision($this->safe_string($market, 'quotePrecision'))),
                 ),
                 'limits' => array(
                     'leverage' => array(
@@ -741,8 +745,7 @@ class tokocrypto extends Exchange {
             );
             if (is_array($filtersByType) && array_key_exists('PRICE_FILTER', $filtersByType)) {
                 $filter = $this->safe_value($filtersByType, 'PRICE_FILTER', array());
-                $tickSize = $this->safe_string($filter, 'tickSize');
-                $entry['precision']['price'] = $this->precision_from_string($tickSize);
+                $entry['precision']['price'] = $this->safe_number($filter, 'tickSize');
                 // PRICE_FILTER reports zero values for maxPrice
                 // since they updated $filter types in November 2018
                 // https://github.com/ccxt/ccxt/issues/4286
@@ -751,12 +754,11 @@ class tokocrypto extends Exchange {
                     'min' => $this->safe_number($filter, 'minPrice'),
                     'max' => $this->safe_number($filter, 'maxPrice'),
                 );
-                $entry['precision']['price'] = $this->precision_from_string($filter['tickSize']);
+                $entry['precision']['price'] = $filter['tickSize'];
             }
             if (is_array($filtersByType) && array_key_exists('LOT_SIZE', $filtersByType)) {
                 $filter = $this->safe_value($filtersByType, 'LOT_SIZE', array());
-                $stepSize = $this->safe_string($filter, 'stepSize');
-                $entry['precision']['amount'] = $this->precision_from_string($stepSize);
+                $entry['precision']['amount'] = $this->safe_number($filter, 'stepSize');
                 $entry['limits']['amount'] = array(
                     'min' => $this->safe_number($filter, 'minQty'),
                     'max' => $this->safe_number($filter, 'maxQty'),
@@ -780,7 +782,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_order_book(string $symbol, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#order-book
+         *
          * fetches information on open orders with bid (buy) and ask (sell) prices, volumes and other $data
          * @param {string} $symbol unified $symbol of the $market to fetch the order book for
          * @param {int} [$limit] the maximum amount of order book entries to return
@@ -837,7 +841,7 @@ class tokocrypto extends Exchange {
         return $orderbook;
     }
 
-    public function parse_trade($trade, ?array $market = null): array {
+    public function parse_trade(array $trade, ?array $market = null): array {
         //
         // aggregate trades
         // https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#compressedaggregate-trades-list
@@ -985,8 +989,10 @@ class tokocrypto extends Exchange {
 
     public function fetch_trades(string $symbol, ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#recent-trades-$list
          * @see https://www.tokocrypto.com/apidocs/#compressedaggregate-trades-$list
+         *
          * get the $list of most recent trades for a particular $symbol
          * @param {string} $symbol unified $symbol of the $market to fetch trades for
          * @param {int} [$since] timestamp in ms of the earliest trade to fetch
@@ -1174,7 +1180,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_tickers(?array $symbols = null, $params = array ()): array {
         /**
+         *
          * @see https://binance-docs.github.io/apidocs/spot/en/#24hr-ticker-price-change-statistics
+         *
          * fetches price tickers for multiple markets, statistical information calculated over the past 24 hours for each market
          * @param {string[]|null} $symbols unified $symbols of the markets to fetch the ticker for, all market tickers are returned if not assigned
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
@@ -1194,7 +1202,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_ticker(string $symbol, $params = array ()): array {
         /**
+         *
          * @see https://binance-docs.github.io/apidocs/spot/en/#24hr-ticker-price-change-statistics
+         *
          * fetches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific $market
          * @param {string} $symbol unified $symbol of the $market to fetch the ticker for
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
@@ -1215,7 +1225,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_bids_asks(?array $symbols = null, $params = array ()) {
         /**
+         *
          * @see https://binance-docs.github.io/apidocs/spot/en/#symbol-order-book-ticker
+         *
          * fetches the bid and ask price and volume for multiple markets
          * @param {string[]|null} $symbols unified $symbols of the markets to fetch the bids and asks for, all markets are returned if not assigned
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
@@ -1273,7 +1285,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_ohlcv(string $symbol, $timeframe = '1m', ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-$data
+         *
          * fetches historical candlestick $data containing the open, high, low, and close $price, and the volume of a $market
          * @param {string} $symbol unified $symbol of the $market to fetch OHLCV $data for
          * @param {string} $timeframe the length of time each candle represents
@@ -1329,7 +1343,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_balance($params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#account-information-signed
+         *
          * query for balance and get the amount of funds available for trading or funds locked in orders
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @param {string} [$params->type] 'future', 'delivery', 'savings', 'funding', or 'spot'
@@ -1392,7 +1408,7 @@ class tokocrypto extends Exchange {
         return $this->safe_balance($result);
     }
 
-    public function parse_order_status($status) {
+    public function parse_order_status(?string $status) {
         $statuses = array(
             '-2' => 'open',
             '0' => 'open', // NEW
@@ -1413,7 +1429,7 @@ class tokocrypto extends Exchange {
         return $this->safe_string($statuses, $status, $status);
     }
 
-    public function parse_order($order, ?array $market = null): array {
+    public function parse_order(array $order, ?array $market = null): array {
         //
         // spot
         //
@@ -1539,8 +1555,6 @@ class tokocrypto extends Exchange {
             $timeInForce = 'PO';
         }
         $postOnly = ($type === 'limit_maker') || ($timeInForce === 'PO');
-        $stopPriceString = $this->safe_string($order, 'stopPrice');
-        $stopPrice = $this->parse_number($this->omit_zero($stopPriceString));
         return $this->safe_order(array(
             'info' => $order,
             'id' => $id,
@@ -1555,8 +1569,7 @@ class tokocrypto extends Exchange {
             'reduceOnly' => $this->safe_value($order, 'reduceOnly'),
             'side' => $side,
             'price' => $price,
-            'stopPrice' => $stopPrice,
-            'triggerPrice' => $stopPrice,
+            'triggerPrice' => $this->parse_number($this->omit_zero($this->safe_string($order, 'stopPrice'))),
             'amount' => $amount,
             'cost' => $cost,
             'average' => $average,
@@ -1581,13 +1594,15 @@ class tokocrypto extends Exchange {
     public function create_order(string $symbol, string $type, string $side, float $amount, ?float $price = null, $params = array ()) {
         /**
          * create a trade order
+         *
          * @see https://www.tokocrypto.com/apidocs/#new-order--signed
          * @see https://www.tokocrypto.com/apidocs/#account-trade-list-signed
+         *
          * @param {string} $symbol unified $symbol of the $market to create an order in
          * @param {string} $type 'market' or 'limit'
          * @param {string} $side 'buy' or 'sell'
          * @param {float} $amount how much of currency you want to trade in units of base currency
-         * @param {float} [$price] the $price at which the order is to be fullfilled, in units of the quote currency, ignored in $market orders
+         * @param {float} [$price] the $price at which the order is to be fulfilled, in units of the quote currency, ignored in $market orders
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @param {float} [$params->triggerPrice] the $price at which a trigger order would be triggered
          * @param {float} [$params->cost] for spot $market buy orders, the quote quantity that can be used alternative for the $amount
@@ -1604,8 +1619,8 @@ class tokocrypto extends Exchange {
         $params = $this->omit($params, array( 'clientId', 'clientOrderId' ));
         $initialUppercaseType = strtoupper($type);
         $uppercaseType = $initialUppercaseType;
-        $stopPrice = $this->safe_value_2($params, 'triggerPrice', 'stopPrice');
-        if ($stopPrice !== null) {
+        $triggerPrice = $this->safe_value_2($params, 'triggerPrice', 'stopPrice');
+        if ($triggerPrice !== null) {
             $params = $this->omit($params, array( 'triggerPrice', 'stopPrice' ));
             if ($uppercaseType === 'MARKET') {
                 $uppercaseType = 'STOP_LOSS';
@@ -1616,7 +1631,7 @@ class tokocrypto extends Exchange {
         $validOrderTypes = $this->safe_value($market['info'], 'orderTypes');
         if (!$this->in_array($uppercaseType, $validOrderTypes)) {
             if ($initialUppercaseType !== $uppercaseType) {
-                throw new InvalidOrder($this->id . ' $stopPrice parameter is not allowed for ' . $symbol . ' ' . $type . ' orders');
+                throw new InvalidOrder($this->id . ' $triggerPrice parameter is not allowed for ' . $symbol . ' ' . $type . ' orders');
             } else {
                 throw new InvalidOrder($this->id . ' ' . $type . ' is not a valid order $type for the ' . $symbol . ' market');
             }
@@ -1652,17 +1667,17 @@ class tokocrypto extends Exchange {
         }
         // additional required fields depending on the order $type
         $priceIsRequired = false;
-        $stopPriceIsRequired = false;
+        $triggerPriceIsRequired = false;
         $quantityIsRequired = false;
         //
         // spot/margin
         //
         //     LIMIT                timeInForce, quantity, $price
         //     MARKET               quantity or quoteOrderQty
-        //     STOP_LOSS            quantity, $stopPrice
-        //     STOP_LOSS_LIMIT      timeInForce, quantity, $price, $stopPrice
-        //     TAKE_PROFIT          quantity, $stopPrice
-        //     TAKE_PROFIT_LIMIT    timeInForce, quantity, $price, $stopPrice
+        //     STOP_LOSS            quantity, stopPrice
+        //     STOP_LOSS_LIMIT      timeInForce, quantity, $price, stopPrice
+        //     TAKE_PROFIT          quantity, stopPrice
+        //     TAKE_PROFIT_LIMIT    timeInForce, quantity, $price, stopPrice
         //     LIMIT_MAKER          quantity, $price
         //
         if ($uppercaseType === 'MARKET') {
@@ -1694,14 +1709,14 @@ class tokocrypto extends Exchange {
             $priceIsRequired = true;
             $quantityIsRequired = true;
         } elseif (($uppercaseType === 'STOP_LOSS') || ($uppercaseType === 'TAKE_PROFIT')) {
-            $stopPriceIsRequired = true;
+            $triggerPriceIsRequired = true;
             $quantityIsRequired = true;
             if ($market['linear'] || $market['inverse']) {
                 $priceIsRequired = true;
             }
         } elseif (($uppercaseType === 'STOP_LOSS_LIMIT') || ($uppercaseType === 'TAKE_PROFIT_LIMIT')) {
             $quantityIsRequired = true;
-            $stopPriceIsRequired = true;
+            $triggerPriceIsRequired = true;
             $priceIsRequired = true;
         } elseif ($uppercaseType === 'LIMIT_MAKER') {
             $priceIsRequired = true;
@@ -1716,11 +1731,11 @@ class tokocrypto extends Exchange {
             }
             $request['price'] = $this->price_to_precision($symbol, $price);
         }
-        if ($stopPriceIsRequired) {
-            if ($stopPrice === null) {
-                throw new InvalidOrder($this->id . ' createOrder() requires a $stopPrice extra param for a ' . $type . ' order');
+        if ($triggerPriceIsRequired) {
+            if ($triggerPrice === null) {
+                throw new InvalidOrder($this->id . ' createOrder() requires a $triggerPrice extra param for a ' . $type . ' order');
             } else {
-                $request['stopPrice'] = $this->price_to_precision($symbol, $stopPrice);
+                $request['stopPrice'] = $this->price_to_precision($symbol, $triggerPrice);
             }
         }
         $response = $this->privatePostOpenV1Orders ($this->extend($request, $params));
@@ -1758,8 +1773,11 @@ class tokocrypto extends Exchange {
 
     public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#all-orders-signed
+         *
          * fetches information on an order made by the user
+         * @param {string} $id order $id
          * @param {string} $symbol unified $symbol of the market the order was made in
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {array} An ~@link https://docs.ccxt.com/#/?$id=order-structure order structure~
@@ -1806,7 +1824,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_orders(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#all-$orders-signed
+         *
          * fetches information on multiple $orders made by the user
          * @param {string} $symbol unified $market $symbol of the $market $orders were made in
          * @param {int} [$since] the earliest time in ms to fetch $orders for
@@ -1876,7 +1896,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_open_orders(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#all-orders-signed
+         *
          * fetch all unfilled currently open orders
          * @param {string} $symbol unified market $symbol
          * @param {int} [$since] the earliest time in ms to fetch open orders for
@@ -1890,7 +1912,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_closed_orders(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#all-orders-signed
+         *
          * fetches information on multiple closed orders made by the user
          * @param {string} $symbol unified market $symbol of the market orders were made in
          * @param {int} [$since] the earliest time in ms to fetch orders for
@@ -1904,7 +1928,9 @@ class tokocrypto extends Exchange {
 
     public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#cancel-order-signed
+         *
          * cancels an open order
          * @param {string} $id order $id
          * @param {string} $symbol unified $symbol of the market the order was made in
@@ -1948,7 +1974,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_my_trades(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#account-trade-list-signed
+         *
          * fetch all $trades made by the user
          * @param {string} $symbol unified $market $symbol
          * @param {int} [$since] the earliest time in ms to fetch $trades for
@@ -2006,10 +2034,12 @@ class tokocrypto extends Exchange {
         return $this->parse_trades($trades, $market, $since, $limit);
     }
 
-    public function fetch_deposit_address(string $code, $params = array ()) {
+    public function fetch_deposit_address(string $code, $params = array ()): array {
         /**
-         * @see https://www.tokocrypto.com/apidocs/#deposit-$address-signed
          * fetch the deposit $address for a $currency associated with this account
+         *
+         * @see https://www.tokocrypto.com/apidocs/#deposit-$address-signed
+         *
          * @param {string} $code unified $currency $code
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {array} an ~@link https://docs.ccxt.com/#/?id=$address-structure $address structure~
@@ -2053,17 +2083,19 @@ class tokocrypto extends Exchange {
         }
         $this->check_address($address);
         return array(
+            'info' => $response,
             'currency' => $code,
+            'network' => $this->safe_string($data, 'network'),
             'address' => $address,
             'tag' => $tag,
-            'network' => $this->safe_string($data, 'network'),
-            'info' => $response,
         );
     }
 
     public function fetch_deposits(?string $code = null, ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#deposit-history-signed
+         *
          * fetch all $deposits made to an account
          * @param {string} $code unified $currency $code
          * @param {int} [$since] the earliest time in ms to fetch $deposits for
@@ -2123,7 +2155,9 @@ class tokocrypto extends Exchange {
 
     public function fetch_withdrawals(?string $code = null, ?int $since = null, ?int $limit = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#withdraw-signed
+         *
          * fetch all $withdrawals made from an account
          * @param {string} $code unified $currency $code
          * @param {int} [$since] the earliest time in ms to fetch $withdrawals for
@@ -2197,7 +2231,7 @@ class tokocrypto extends Exchange {
         return $this->safe_string($statuses, $status, $status);
     }
 
-    public function parse_transaction($transaction, ?array $currency = null): array {
+    public function parse_transaction(array $transaction, ?array $currency = null): array {
         //
         // fetchDeposits
         //
@@ -2313,9 +2347,11 @@ class tokocrypto extends Exchange {
         );
     }
 
-    public function withdraw(string $code, float $amount, string $address, $tag = null, $params = array ()) {
+    public function withdraw(string $code, float $amount, string $address, $tag = null, $params = array ()): array {
         /**
+         *
          * @see https://www.tokocrypto.com/apidocs/#withdraw-signed
+         *
          * make a withdrawal
          * @param {string} $code unified $currency $code
          * @param {float} $amount the $amount to withdraw
@@ -2421,7 +2457,7 @@ class tokocrypto extends Exchange {
         return array( 'url' => $url, 'method' => $method, 'body' => $body, 'headers' => $headers );
     }
 
-    public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
+    public function handle_errors(int $code, string $reason, string $url, string $method, array $headers, string $body, $response, $requestHeaders, $requestBody) {
         if (($code === 418) || ($code === 429)) {
             throw new DDoSProtection($this->id . ' ' . (string) $code . ' ' . $reason . ' ' . $body);
         }

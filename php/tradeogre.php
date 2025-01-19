@@ -76,7 +76,6 @@ class tradeogre extends Exchange {
                 'fetchOrderBooks' => false,
                 'fetchOrders' => false,
                 'fetchOrderTrades' => false,
-                'fetchPermissions' => false,
                 'fetchPosition' => false,
                 'fetchPositionHistory' => false,
                 'fetchPositionMode' => false,
@@ -158,13 +157,66 @@ class tradeogre extends Exchange {
             ),
             'options' => array(
             ),
+            'features' => array(
+                'spot' => array(
+                    'sandbox' => false,
+                    'createOrder' => array(
+                        'marginMode' => false,
+                        'triggerPrice' => false,
+                        'triggerDirection' => false,
+                        'triggerPriceType' => null,
+                        'stopLossPrice' => false,
+                        'takeProfitPrice' => false,
+                        'attachedStopLossTakeProfit' => null,
+                        'timeInForce' => array(
+                            'IOC' => false,
+                            'FOK' => false,
+                            'PO' => false,
+                            'GTD' => false,
+                        ),
+                        'hedged' => false,
+                        'trailing' => false,
+                        'leverage' => false,
+                        'marketBuyByCost' => false,
+                        'marketBuyRequiresPrice' => false,
+                        'selfTradePrevention' => false,
+                        'iceberg' => false,
+                    ),
+                    'createOrders' => null,
+                    'fetchMyTrades' => null,
+                    'fetchOrder' => array(
+                        'marginMode' => false,
+                        'trigger' => false,
+                        'trailing' => false,
+                    ),
+                    'fetchOpenOrders' => array(
+                        'marginMode' => false,
+                        'limit' => null,
+                        'trigger' => false,
+                        'trailing' => false,
+                    ),
+                    'fetchOrders' => null,
+                    'fetchClosedOrders' => null,
+                    'fetchOHLCV' => null, // todo
+                ),
+                'swap' => array(
+                    'linear' => null,
+                    'inverse' => null,
+                ),
+                'future' => array(
+                    'linear' => null,
+                    'inverse' => null,
+                ),
+            ),
         ));
     }
 
     public function fetch_markets($params = array ()): array {
         /**
          * retrieves data on all markets for bigone
+         *
          * @see https://github.com/P2B-team/p2b-api-docs/blob/master/api-doc.md#markets
+         *
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {array[]} an array of objects representing $market data
          */
@@ -215,7 +267,7 @@ class tradeogre extends Exchange {
                 'inverse' => null,
                 'contractSize' => null,
                 'taker' => $this->fees['trading']['taker'],
-                'maker' => $this->fees['trading']['taker'],
+                'maker' => $this->fees['trading']['maker'],
                 'expiry' => null,
                 'expiryDatetime' => null,
                 'strike' => null,
@@ -380,7 +432,7 @@ class tradeogre extends Exchange {
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
-    public function parse_trade($trade, ?array $market = null) {
+    public function parse_trade(array $trade, ?array $market = null) {
         //
         //  {
         //      "date":1515128233,
@@ -447,24 +499,30 @@ class tradeogre extends Exchange {
     public function create_order(string $symbol, string $type, string $side, float $amount, ?float $price = null, $params = array ()) {
         /**
          * create a trade order
+         *
+         * @see https://tradeogre.com/help/api#:~:text=u%20%27%7Bpublic%7D%3A%7Bprivate%7D%27-,Submit%20Buy%20Order
+         *
          * @param {string} $symbol unified $symbol of the $market to create an order in
-         * @param {string} $type not used by tradeogre
+         * @param {string} $type must be 'limit'
          * @param {string} $side 'buy' or 'sell'
          * @param {float} $amount how much of currency you want to trade in units of base currency
-         * @param {float} $price the $price at which the order is to be fullfilled, in units of the quote currency
+         * @param {float} $price the $price at which the order is to be fulfilled, in units of the quote currency
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {array} an ~@link https://docs.ccxt.com/#/?id=order-structure order structure~
          */
         $this->load_markets();
         $market = $this->market($symbol);
+        if ($type === 'market') {
+            throw new BadRequest($this->id . ' createOrder does not support $market orders');
+        }
+        if ($price === null) {
+            throw new ArgumentsRequired($this->id . ' createOrder requires a limit parameter');
+        }
         $request = array(
             'market' => $market['id'],
             'quantity' => $this->parse_to_numeric($this->amount_to_precision($symbol, $amount)),
             'price' => $this->parse_to_numeric($this->price_to_precision($symbol, $price)),
         );
-        if ($type === 'market') {
-            throw new BadRequest($this->id . ' createOrder does not support $market orders');
-        }
         $response = null;
         if ($side === 'buy') {
             $response = $this->privatePostOrderBuy ($this->extend($request, $params));
@@ -498,12 +556,18 @@ class tradeogre extends Exchange {
          * @return {array[]} a list of ~@link https://docs.ccxt.com/#/?id=order-structure order structures~
          */
         $this->load_markets();
-        return $this->cancel_order('all', $symbol, $params);
+        $response = $this->cancel_order('all', $symbol, $params);
+        return array(
+            $response,
+        );
     }
 
     public function fetch_open_orders(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all unfilled currently open orders
+         *
+         * @see https://tradeogre.com/help/api#:~:text=%7B%22success%22%3Atrue%7D-,Get%20Orders,-Method%20(POST)
+         *
          * @param {string} $symbol unified $market $symbol of the $market orders were made in
          * @param {int} [$since] the earliest time in ms to fetch orders for
          * @param {int} [$limit] the maximum number of order structures to retrieve
@@ -526,7 +590,10 @@ class tradeogre extends Exchange {
     public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
-         * @see https://github.com/ace-exchange/ace-official-api-docs/blob/master/api_v2.md#open-api---order-status
+         *
+         * @see https://tradeogre.com/help/api#:~:text=market%22%3A%22XMR%2DBTC%22%7D%5D-,Get%20Order,-Method%20(GET)
+         *
+         * @param {string} $id order $id
          * @param {string} $symbol unified $symbol of the market the order was made in
          * @param {array} [$params] extra parameters specific to the exchange API endpoint
          * @return {array} An ~@link https://docs.ccxt.com/#/?$id=order-structure order structure~
@@ -539,7 +606,7 @@ class tradeogre extends Exchange {
         return $this->parse_order($response, null);
     }
 
-    public function parse_order($order, ?array $market = null): array {
+    public function parse_order(array $order, ?array $market = null): array {
         //
         //
         // {
@@ -567,7 +634,7 @@ class tradeogre extends Exchange {
             'postOnly' => null,
             'side' => $this->safe_string($order, 'type'),
             'price' => $this->safe_string($order, 'price'),
-            'stopPrice' => null,
+            'triggerPrice' => null,
             'amount' => $this->safe_string($order, 'quantity'),
             'cost' => null,
             'average' => null,
@@ -603,7 +670,7 @@ class tradeogre extends Exchange {
         return array( 'url' => $url, 'method' => $method, 'body' => $body, 'headers' => $headers );
     }
 
-    public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
+    public function handle_errors(int $code, string $reason, string $url, string $method, array $headers, string $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
             return null;
         }

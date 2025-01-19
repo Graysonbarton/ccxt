@@ -7,7 +7,7 @@ from ccxt.async_support.base.exchange import Exchange
 from ccxt.abstract.gemini import ImplicitAPI
 import asyncio
 import hashlib
-from ccxt.base.types import Balances, Currencies, Currency, Int, Market, Num, Order, OrderBook, OrderSide, OrderType, Str, Strings, Ticker, Tickers, Trade, TradingFees, Transaction
+from ccxt.base.types import Balances, Currencies, Currency, DepositAddress, Int, Market, Num, Order, OrderBook, OrderSide, OrderType, Str, Strings, Ticker, Tickers, Trade, TradingFees, Transaction
 from typing import List
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import AuthenticationError
@@ -62,6 +62,7 @@ class gemini(Exchange, ImplicitAPI):
                 'fetchCrossBorrowRates': False,
                 'fetchCurrencies': True,
                 'fetchDepositAddress': True,
+                'fetchDepositAddresses': False,
                 'fetchDepositAddressesByNetwork': True,
                 'fetchDepositsWithdrawals': True,
                 'fetchFundingHistory': False,
@@ -200,6 +201,7 @@ class gemini(Exchange, ImplicitAPI):
                         'v1/account/create': 1,
                         'v1/account/list': 1,
                         'v1/heartbeat': 1,
+                        'v1/roles': 1,
                     },
                 },
             },
@@ -309,6 +311,69 @@ class gemini(Exchange, ImplicitAPI):
                     },
                 },
             },
+            'features': {
+                'default': {
+                    'sandbox': True,
+                    'createOrder': {
+                        'marginMode': False,
+                        'triggerPrice': True,
+                        'triggerPriceType': None,
+                        'triggerDirection': False,
+                        'stopLossPrice': False,  # todo
+                        'takeProfitPrice': False,  # todo
+                        'attachedStopLossTakeProfit': None,
+                        'timeInForce': {
+                            'IOC': True,
+                            'FOK': True,
+                            'PO': True,
+                            'GTD': False,
+                        },
+                        'hedged': False,
+                        'trailing': False,
+                        'leverage': False,
+                        'marketBuyByCost': True,
+                        'marketBuyRequiresPrice': False,
+                        'selfTradePrevention': False,
+                        'iceberg': False,
+                    },
+                    'createOrders': None,
+                    'fetchMyTrades': {
+                        'marginMode': False,
+                        'limit': 500,
+                        'daysBack': None,
+                        'untilDays': None,
+                    },
+                    'fetchOrder': {
+                        'marginMode': False,
+                        'trigger': False,
+                        'trailing': False,
+                    },
+                    'fetchOpenOrders': {
+                        'marginMode': False,
+                        'limit': None,
+                        'trigger': False,
+                        'trailing': False,
+                    },
+                    'fetchOrders': None,
+                    'fetchClosedOrders': None,  # todo: implement
+                    'fetchOHLCV': {
+                        'limit': None,
+                    },
+                },
+                'spot': {
+                    'extends': 'default',
+                },
+                'swap': {
+                    'linear': {
+                        'extends': 'default',
+                    },
+                    'inverse': None,
+                },
+                'future': {
+                    'linear': None,
+                    'inverse': None,
+                },
+            },
         })
 
     async def fetch_currencies(self, params={}) -> Currencies:
@@ -321,7 +386,7 @@ class gemini(Exchange, ImplicitAPI):
 
     async def fetch_currencies_from_web(self, params={}):
         """
-         * @ignore
+ @ignore
         fetches all available currencies on an exchange
         :param dict [params]: extra parameters specific to the endpoint
         :returns dict: an associative dictionary of currencies
@@ -349,7 +414,7 @@ class gemini(Exchange, ImplicitAPI):
         #        ]
         #    }
         #
-        result = {}
+        result: dict = {}
         self.options['tradingPairs'] = self.safe_list(data, 'tradingPairs')
         currenciesArray = self.safe_value(data, 'currencies', [])
         for i in range(0, len(currenciesArray)):
@@ -358,7 +423,7 @@ class gemini(Exchange, ImplicitAPI):
             code = self.safe_currency_code(id)
             type = 'fiat' if self.safe_string(currency, 7) else 'crypto'
             precision = self.parse_number(self.parse_precision(self.safe_string(currency, 5)))
-            networks = {}
+            networks: dict = {}
             networkId = self.safe_string(currency, 9)
             networkCode = None
             if networkId is not None:
@@ -412,7 +477,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_markets(self, params={}) -> List[Market]:
         """
         retrieves data on all markets for gemini
-        :see: https://docs.gemini.com/rest-api/#symbols
+
+        https://docs.gemini.com/rest-api/#symbols
+
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict[]: an array of objects representing market data
         """
@@ -519,7 +586,7 @@ class gemini(Exchange, ImplicitAPI):
         return result
 
     def parse_market_active(self, status):
-        statuses = {
+        statuses: dict = {
             'open': True,
             'closed': False,
             'cancel_only': True,
@@ -539,7 +606,7 @@ class gemini(Exchange, ImplicitAPI):
         result = []
         for i in range(0, len(fetchUsdtMarkets)):
             marketId = fetchUsdtMarkets[i]
-            request = {
+            request: dict = {
                 'symbol': marketId,
             }
             # don't use Promise.all here, for some reason the exchange can't handle it and crashes
@@ -567,7 +634,7 @@ class gemini(Exchange, ImplicitAPI):
             promises = []
             for i in range(0, len(marketIds)):
                 marketId = marketIds[i]
-                request = {
+                request: dict = {
                     'symbol': marketId,
                 }
                 promises.append(self.publicGetV1SymbolsDetailsSymbol(self.extend(request, params)))
@@ -752,7 +819,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_order_book(self, symbol: str, limit: Int = None, params={}) -> OrderBook:
         """
         fetches information on open orders with bid(buy) and ask(sell) prices, volumes and other data
-        :see: https://docs.gemini.com/rest-api/#current-order-book
+
+        https://docs.gemini.com/rest-api/#current-order-book
+
         :param str symbol: unified symbol of the market to fetch the order book for
         :param int [limit]: the maximum amount of order book entries to return
         :param dict [params]: extra parameters specific to the exchange API endpoint
@@ -760,7 +829,7 @@ class gemini(Exchange, ImplicitAPI):
         """
         await self.load_markets()
         market = self.market(symbol)
-        request = {
+        request: dict = {
             'symbol': market['id'],
         }
         if limit is not None:
@@ -772,7 +841,7 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_ticker_v1(self, symbol: str, params={}):
         await self.load_markets()
         market = self.market(symbol)
-        request = {
+        request: dict = {
             'symbol': market['id'],
         }
         response = await self.publicGetV1PubtickerSymbol(self.extend(request, params))
@@ -793,7 +862,7 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_ticker_v2(self, symbol: str, params={}):
         await self.load_markets()
         market = self.market(symbol)
-        request = {
+        request: dict = {
             'symbol': market['id'],
         }
         response = await self.publicGetV2TickerSymbol(self.extend(request, params))
@@ -813,8 +882,9 @@ class gemini(Exchange, ImplicitAPI):
         return self.parse_ticker(response, market)
 
     async def fetch_ticker_v1_and_v2(self, symbol: str, params={}):
-        tickerA = await self.fetch_ticker_v1(symbol, params)
-        tickerB = await self.fetch_ticker_v2(symbol, params)
+        tickerPromiseA = self.fetch_ticker_v1(symbol, params)
+        tickerPromiseB = self.fetch_ticker_v2(symbol, params)
+        tickerA, tickerB = await asyncio.gather(*[tickerPromiseA, tickerPromiseB])
         return self.deep_extend(tickerA, {
             'open': tickerB['open'],
             'high': tickerB['high'],
@@ -828,11 +898,13 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_ticker(self, symbol: str, params={}) -> Ticker:
         """
         fetches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific market
-        :see: https://docs.gemini.com/rest-api/#ticker
-        :see: https://docs.gemini.com/rest-api/#ticker-v2
+
+        https://docs.gemini.com/rest-api/#ticker
+        https://docs.gemini.com/rest-api/#ticker-v2
+
         :param str symbol: unified symbol of the market to fetch the ticker for
         :param dict [params]: extra parameters specific to the exchange API endpoint
-        :param dict [params.fetchTickerMethod]: 'fetchTickerV2', 'fetchTickerV1' or 'fetchTickerV1AndV2' - 'fetchTickerV1' for original ccxt.gemini.fetch_ticker- 'fetchTickerV1AndV2' for 2 api calls to get the result of both fetchTicker methods - default = 'fetchTickerV1'
+        :param dict [params.fetchTickerMethod]: 'fetchTickerV2', 'fetchTickerV1' or 'fetchTickerV1AndV2' - 'fetchTickerV1' for original ccxt.gemini.fetchTicker - 'fetchTickerV1AndV2' for 2 api calls to get the result of both fetchTicker methods - default = 'fetchTickerV1'
         :returns dict: a `ticker structure <https://docs.ccxt.com/#/?id=ticker-structure>`
         """
         method = self.safe_value(self.options, 'fetchTickerMethod', 'fetchTickerV1')
@@ -935,7 +1007,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_tickers(self, symbols: Strings = None, params={}) -> Tickers:
         """
         fetches price tickers for multiple markets, statistical information calculated over the past 24 hours for each market
-        :see: https://docs.gemini.com/rest-api/#price-feed
+
+        https://docs.gemini.com/rest-api/#price-feed
+
         :param str[]|None symbols: unified symbols of the markets to fetch the ticker for, all market tickers are returned if not assigned
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of `ticker structures <https://docs.ccxt.com/#/?id=ticker-structure>`
@@ -958,7 +1032,7 @@ class gemini(Exchange, ImplicitAPI):
         #
         return self.parse_tickers(response, symbols)
 
-    def parse_trade(self, trade, market: Market = None) -> Trade:
+    def parse_trade(self, trade: dict, market: Market = None) -> Trade:
         #
         # public fetchTrades
         #
@@ -1024,7 +1098,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_trades(self, symbol: str, since: Int = None, limit: Int = None, params={}) -> List[Trade]:
         """
         get the list of most recent trades for a particular symbol
-        :see: https://docs.gemini.com/rest-api/#trade-history
+
+        https://docs.gemini.com/rest-api/#trade-history
+
         :param str symbol: unified symbol of the market to fetch trades for
         :param int [since]: timestamp in ms of the earliest trade to fetch
         :param int [limit]: the maximum amount of trades to fetch
@@ -1033,7 +1109,7 @@ class gemini(Exchange, ImplicitAPI):
         """
         await self.load_markets()
         market = self.market(symbol)
-        request = {
+        request: dict = {
             'symbol': market['id'],
         }
         if limit is not None:
@@ -1057,7 +1133,7 @@ class gemini(Exchange, ImplicitAPI):
         return self.parse_trades(response, market, since, limit)
 
     def parse_balance(self, response) -> Balances:
-        result = {'info': response}
+        result: dict = {'info': response}
         for i in range(0, len(response)):
             balance = response[i]
             currencyId = self.safe_string(balance, 'currency')
@@ -1071,7 +1147,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_trading_fees(self, params={}) -> TradingFees:
         """
         fetch the trading fees for multiple markets
-        :see: https://docs.gemini.com/rest-api/#get-notional-volume
+
+        https://docs.gemini.com/rest-api/#get-notional-volume
+
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a dictionary of `fee structures <https://docs.ccxt.com/#/?id=fee-structure>` indexed by market symbols
         """
@@ -1111,7 +1189,7 @@ class gemini(Exchange, ImplicitAPI):
         takerString = Precise.string_div(takerBps, '10000')
         maker = self.parse_number(makerString)
         taker = self.parse_number(takerString)
-        result = {}
+        result: dict = {}
         for i in range(0, len(self.symbols)):
             symbol = self.symbols[i]
             result[symbol] = {
@@ -1127,7 +1205,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_balance(self, params={}) -> Balances:
         """
         query for balance and get the amount of funds available for trading or funds locked in orders
-        :see: https://docs.gemini.com/rest-api/#get-available-balances
+
+        https://docs.gemini.com/rest-api/#get-available-balances
+
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: a `balance structure <https://docs.ccxt.com/#/?id=balance-structure>`
         """
@@ -1135,7 +1215,7 @@ class gemini(Exchange, ImplicitAPI):
         response = await self.privatePostV1Balances(params)
         return self.parse_balance(response)
 
-    def parse_order(self, order, market: Market = None) -> Order:
+    def parse_order(self, order: dict, market: Market = None) -> Order:
         #
         # createOrder(private)
         #
@@ -1284,7 +1364,6 @@ class gemini(Exchange, ImplicitAPI):
             'postOnly': postOnly,
             'side': side,
             'price': price,
-            'stopPrice': None,
             'triggerPrice': None,
             'average': average,
             'cost': None,
@@ -1298,13 +1377,16 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_order(self, id: str, symbol: Str = None, params={}):
         """
         fetches information on an order made by the user
-        :see: https://docs.gemini.com/rest-api/#order-status
+
+        https://docs.gemini.com/rest-api/#order-status
+
+        :param str id: order id
         :param str symbol: unified symbol of the market the order was made in
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: An `order structure <https://docs.ccxt.com/#/?id=order-structure>`
         """
         await self.load_markets()
-        request = {
+        request: dict = {
             'order_id': id,
         }
         response = await self.privatePostV1OrderStatus(self.extend(request, params))
@@ -1336,7 +1418,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_open_orders(self, symbol: Str = None, since: Int = None, limit: Int = None, params={}) -> List[Order]:
         """
         fetch all unfilled currently open orders
-        :see: https://docs.gemini.com/rest-api/#get-active-orders
+
+        https://docs.gemini.com/rest-api/#get-active-orders
+
         :param str symbol: unified market symbol
         :param int [since]: the earliest time in ms to fetch open orders for
         :param int [limit]: the maximum number of  open orders structures to retrieve
@@ -1378,12 +1462,14 @@ class gemini(Exchange, ImplicitAPI):
     async def create_order(self, symbol: str, type: OrderType, side: OrderSide, amount: float, price: Num = None, params={}):
         """
         create a trade order
-        :see: https://docs.gemini.com/rest-api/#new-order
+
+        https://docs.gemini.com/rest-api/#new-order
+
         :param str symbol: unified symbol of the market to create an order in
         :param str type: must be 'limit'
         :param str side: 'buy' or 'sell'
         :param float amount: how much of currency you want to trade in units of base currency
-        :param float [price]: the price at which the order is to be fullfilled, in units of the quote currency, ignored in market orders
+        :param float [price]: the price at which the order is to be fulfilled, in units of the quote currency, ignored in market orders
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: an `order structure <https://docs.ccxt.com/#/?id=order-structure>`
         """
@@ -1397,7 +1483,7 @@ class gemini(Exchange, ImplicitAPI):
         market = self.market(symbol)
         amountString = self.amount_to_precision(symbol, amount)
         priceString = self.price_to_precision(symbol, price)
-        request = {
+        request: dict = {
             'client_order_id': clientOrderId,
             'symbol': market['id'],
             'amount': amountString,
@@ -1408,12 +1494,12 @@ class gemini(Exchange, ImplicitAPI):
         }
         type = self.safe_string(params, 'type', type)
         params = self.omit(params, 'type')
-        rawStopPrice = self.safe_string_2(params, 'stop_price', 'stopPrice')
-        params = self.omit(params, ['stop_price', 'stopPrice', 'type'])
+        triggerPrice = self.safe_string_n(params, ['triggerPrice', 'stop_price', 'stopPrice'])
+        params = self.omit(params, ['triggerPrice', 'stop_price', 'stopPrice', 'type'])
         if type == 'stopLimit':
-            raise ArgumentsRequired(self.id + ' createOrder() requires a stopPrice parameter or a stop_price parameter for ' + type + ' orders')
-        if rawStopPrice is not None:
-            request['stop_price'] = self.price_to_precision(symbol, rawStopPrice)
+            raise ArgumentsRequired(self.id + ' createOrder() requires a triggerPrice parameter or a stop_price parameter for ' + type + ' orders')
+        if triggerPrice is not None:
+            request['stop_price'] = self.price_to_precision(symbol, triggerPrice)
             request['type'] = 'exchange stop limit'
         else:
             # No options can be applied to stop-limit orders at self time.
@@ -1463,14 +1549,16 @@ class gemini(Exchange, ImplicitAPI):
     async def cancel_order(self, id: str, symbol: Str = None, params={}):
         """
         cancels an open order
-        :see: https://docs.gemini.com/rest-api/#cancel-order
+
+        https://docs.gemini.com/rest-api/#cancel-order
+
         :param str id: order id
         :param str symbol: unified symbol of the market the order was made in
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: An `order structure <https://docs.ccxt.com/#/?id=order-structure>`
         """
         await self.load_markets()
-        request = {
+        request: dict = {
             'order_id': id,
         }
         response = await self.privatePostV1OrderCancel(self.extend(request, params))
@@ -1503,7 +1591,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_my_trades(self, symbol: Str = None, since: Int = None, limit: Int = None, params={}):
         """
         fetch all trades made by the user
-        :see: https://docs.gemini.com/rest-api/#get-past-trades
+
+        https://docs.gemini.com/rest-api/#get-past-trades
+
         :param str symbol: unified market symbol
         :param int [since]: the earliest time in ms to fetch trades for
         :param int [limit]: the maximum number of trades structures to retrieve
@@ -1514,7 +1604,7 @@ class gemini(Exchange, ImplicitAPI):
             raise ArgumentsRequired(self.id + ' fetchMyTrades() requires a symbol argument')
         await self.load_markets()
         market = self.market(symbol)
-        request = {
+        request: dict = {
             'symbol': market['id'],
         }
         if limit is not None:
@@ -1524,10 +1614,12 @@ class gemini(Exchange, ImplicitAPI):
         response = await self.privatePostV1Mytrades(self.extend(request, params))
         return self.parse_trades(response, market, since, limit)
 
-    async def withdraw(self, code: str, amount: float, address: str, tag=None, params={}):
+    async def withdraw(self, code: str, amount: float, address: str, tag=None, params={}) -> Transaction:
         """
         make a withdrawal
-        :see: https://docs.gemini.com/rest-api/#withdraw-crypto-funds
+
+        https://docs.gemini.com/rest-api/#withdraw-crypto-funds
+
         :param str code: unified currency code
         :param float amount: the amount to withdraw
         :param str address: the address to withdraw to
@@ -1539,7 +1631,7 @@ class gemini(Exchange, ImplicitAPI):
         self.check_address(address)
         await self.load_markets()
         currency = self.currency(code)
-        request = {
+        request: dict = {
             'currency': currency['id'],
             'amount': amount,
             'address': address,
@@ -1582,7 +1674,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_deposits_withdrawals(self, code: Str = None, since: Int = None, limit: Int = None, params={}) -> List[Transaction]:
         """
         fetch history of deposits and withdrawals
-        :see: https://docs.gemini.com/rest-api/#transfers
+
+        https://docs.gemini.com/rest-api/#transfers
+
         :param str [code]: unified currency code for the currency of the deposit/withdrawals, default is None
         :param int [since]: timestamp in ms of the earliest deposit/withdrawal, default is None
         :param int [limit]: max number of deposit/withdrawals to return, default is None
@@ -1590,7 +1684,7 @@ class gemini(Exchange, ImplicitAPI):
         :returns dict: a list of `transaction structure <https://docs.ccxt.com/#/?id=transaction-structure>`
         """
         await self.load_markets()
-        request = {}
+        request: dict = {}
         if limit is not None:
             request['limit_transfers'] = limit
         if since is not None:
@@ -1598,7 +1692,7 @@ class gemini(Exchange, ImplicitAPI):
         response = await self.privatePostV1Transfers(self.extend(request, params))
         return self.parse_transactions(response)
 
-    def parse_transaction(self, transaction, currency: Currency = None) -> Transaction:
+    def parse_transaction(self, transaction: dict, currency: Currency = None) -> Transaction:
         #
         # withdraw
         #
@@ -1654,8 +1748,8 @@ class gemini(Exchange, ImplicitAPI):
             'fee': fee,
         }
 
-    def parse_transaction_status(self, status):
-        statuses = {
+    def parse_transaction_status(self, status: Str):
+        statuses: dict = {
             'Advanced': 'ok',
             'Complete': 'ok',
         }
@@ -1679,9 +1773,11 @@ class gemini(Exchange, ImplicitAPI):
             'info': depositAddress,
         }
 
-    async def fetch_deposit_address(self, code: str, params={}):
+    async def fetch_deposit_address(self, code: str, params={}) -> DepositAddress:
         """
-        :see: https://docs.gemini.com/rest-api/#get-deposit-addresses
+
+        https://docs.gemini.com/rest-api/#get-deposit-addresses
+
         fetch the deposit address for a currency associated with self account
         :param str code: unified currency code
         :param dict [params]: extra parameters specific to the endpoint
@@ -1695,10 +1791,12 @@ class gemini(Exchange, ImplicitAPI):
         networkGroup = self.index_by(self.safe_value(groupedByNetwork, networkCode), 'currency')
         return self.safe_value(networkGroup, code)
 
-    async def fetch_deposit_addresses_by_network(self, code: str, params={}):
+    async def fetch_deposit_addresses_by_network(self, code: str, params={}) -> List[DepositAddress]:
         """
         fetch a dictionary of addresses for a currency, indexed by network
-        :see: https://docs.gemini.com/rest-api/#get-deposit-addresses
+
+        https://docs.gemini.com/rest-api/#get-deposit-addresses
+
         :param str code: unified currency code of the currency for the deposit address
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :param str [params.network]:  *required* The chain of currency
@@ -1712,7 +1810,7 @@ class gemini(Exchange, ImplicitAPI):
         if networkCode is None:
             raise ArgumentsRequired(self.id + ' fetchDepositAddresses() requires a network parameter')
         networkId = self.network_code_to_id(networkCode)
-        request = {
+        request: dict = {
             'network': networkId,
         }
         response = await self.privatePostV1AddressesNetwork(self.extend(request, params))
@@ -1749,7 +1847,7 @@ class gemini(Exchange, ImplicitAPI):
             body = self.json(query)
         return {'url': url, 'method': method, 'body': body, 'headers': headers}
 
-    def handle_errors(self, httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody):
+    def handle_errors(self, httpCode: int, reason: str, url: str, method: str, headers: dict, body: str, response, requestHeaders, requestBody):
         if response is None:
             if isinstance(body, str):
                 feedback = self.id + ' ' + body
@@ -1776,14 +1874,16 @@ class gemini(Exchange, ImplicitAPI):
     async def create_deposit_address(self, code: str, params={}):
         """
         create a currency deposit address
-        :see: https://docs.gemini.com/rest-api/#new-deposit-address
+
+        https://docs.gemini.com/rest-api/#new-deposit-address
+
         :param str code: unified currency code of the currency for the deposit address
         :param dict [params]: extra parameters specific to the exchange API endpoint
         :returns dict: an `address structure <https://docs.ccxt.com/#/?id=address-structure>`
         """
         await self.load_markets()
         currency = self.currency(code)
-        request = {
+        request: dict = {
             'currency': currency['id'],
         }
         response = await self.privatePostV1DepositCurrencyNewAddress(self.extend(request, params))
@@ -1799,7 +1899,9 @@ class gemini(Exchange, ImplicitAPI):
     async def fetch_ohlcv(self, symbol: str, timeframe='1m', since: Int = None, limit: Int = None, params={}) -> List[list]:
         """
         fetches historical candlestick data containing the open, high, low, and close price, and the volume of a market
-        :see: https://docs.gemini.com/rest-api/#candles
+
+        https://docs.gemini.com/rest-api/#candles
+
         :param str symbol: unified symbol of the market to fetch OHLCV data for
         :param str timeframe: the length of time each candle represents
         :param int [since]: timestamp in ms of the earliest candle to fetch
@@ -1810,7 +1912,7 @@ class gemini(Exchange, ImplicitAPI):
         await self.load_markets()
         market = self.market(symbol)
         timeframeId = self.safe_string(self.timeframes, timeframe, timeframe)
-        request = {
+        request: dict = {
             'timeframe': timeframeId,
             'symbol': market['id'],
         }

@@ -59,9 +59,12 @@ class coinbase extends \ccxt\async\coinbase {
             /**
              * @ignore
              * subscribes to a websocket channel
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-overview#$subscribe
+             *
              * @param {string} $name the $name of the channel
-             * @param {string|string[]} [$symbol] unified $market $symbol
+             * @param {boolean} $isPrivate whether the channel is private or not
+             * @param {string} [$symbol] unified $market $symbol
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} subscription to a websocket channel
              */
@@ -100,8 +103,11 @@ class coinbase extends \ccxt\async\coinbase {
             /**
              * @ignore
              * subscribes to a websocket channel
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-overview#$subscribe
+             *
              * @param {string} $name the $name of the channel
+             * @param {boolean} $isPrivate whether the channel is private or not
              * @param {string[]} [$symbols] unified $market $symbol
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} subscription to a websocket channel
@@ -162,7 +168,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbol, $params) {
             /**
              * watches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific market
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#ticker-channel
+             *
              * @param {string} [$symbol] unified $symbol of the market to fetch the ticker for
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a ~@link https://docs.ccxt.com/#/?id=ticker-structure ticker structure~
@@ -176,7 +184,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbols, $params) {
             /**
              * watches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific market
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#ticker-batch-channel
+             *
              * @param {string[]} [$symbols] unified symbol of the market to fetch the ticker for
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
              * @return {array} a ~@link https://docs.ccxt.com/#/?id=ticker-structure ticker structure~
@@ -255,18 +265,53 @@ class coinbase extends \ccxt\async\coinbase {
         //        )
         //    }
         //
+        // note! seems coinbase might also send empty data like:
+        //
+        //    {
+        //        "channel" => "ticker_batch",
+        //        "client_id" => "",
+        //        "timestamp" => "2024-05-24T18:22:24.546809523Z",
+        //        "sequence_num" => 1,
+        //        "events" => array(
+        //            {
+        //                "type" => "snapshot",
+        //                "tickers" => array(
+        //                    {
+        //                        "type" => "ticker",
+        //                        "product_id" => "",
+        //                        "price" => "",
+        //                        "volume_24_h" => "",
+        //                        "low_24_h" => "",
+        //                        "high_24_h" => "",
+        //                        "low_52_w" => "",
+        //                        "high_52_w" => "",
+        //                        "price_percent_chg_24_h" => ""
+        //                    }
+        //                )
+        //            }
+        //        )
+        //    }
+        //
+        //
         $channel = $this->safe_string($message, 'channel');
         $events = $this->safe_value($message, 'events', array());
+        $datetime = $this->safe_string($message, 'timestamp');
+        $timestamp = $this->parse8601($datetime);
         $newTickers = array();
         for ($i = 0; $i < count($events); $i++) {
             $tickersObj = $events[$i];
-            $tickers = $this->safe_value($tickersObj, 'tickers', array());
+            $tickers = $this->safe_list($tickersObj, 'tickers', array());
             for ($j = 0; $j < count($tickers); $j++) {
                 $ticker = $tickers[$j];
                 $result = $this->parse_ws_ticker($ticker);
+                $result['timestamp'] = $timestamp;
+                $result['datetime'] = $datetime;
                 $symbol = $result['symbol'];
                 $this->tickers[$symbol] = $result;
                 $wsMarketId = $this->safe_string($ticker, 'product_id');
+                if ($wsMarketId === null) {
+                    continue;
+                }
                 $messageHash = $channel . '::' . $wsMarketId;
                 $newTickers[] = $result;
                 $client->resolve ($result, $messageHash);
@@ -342,7 +387,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * get the list of most recent $trades for a particular $symbol
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#market-$trades-channel
+             *
              * @param {string} $symbol unified $symbol of the market to fetch $trades for
              * @param {int} [$since] timestamp in ms of the earliest trade to fetch
              * @param {int} [$limit] the maximum amount of $trades to fetch
@@ -364,7 +411,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbols, $since, $limit, $params) {
             /**
              * get the list of most recent $trades for a particular symbol
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#market-$trades-channel
+             *
              * @param {string[]} $symbols unified symbol of the market to fetch $trades for
              * @param {int} [$since] timestamp in ms of the earliest trade to fetch
              * @param {int} [$limit] the maximum amount of $trades to fetch
@@ -387,7 +436,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * watches information on multiple $orders made by the user
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#user-channel
+             *
              * @param {string} [$symbol] unified market $symbol of the market $orders were made in
              * @param {int} [$since] the earliest time in ms to fetch $orders for
              * @param {int} [$limit] the maximum number of order structures to retrieve
@@ -408,7 +459,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbol, $limit, $params) {
             /**
              * watches information on open orders with bid (buy) and ask (sell) prices, volumes and other data
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#level2-channel
+             *
              * @param {string} $symbol unified $symbol of the $market to fetch the order book for
              * @param {int} [$limit] the maximum amount of order book entries to return
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
@@ -427,7 +480,9 @@ class coinbase extends \ccxt\async\coinbase {
         return Async\async(function () use ($symbols, $limit, $params) {
             /**
              * watches information on open orders with bid (buy) and ask (sell) prices, volumes and other data
+             *
              * @see https://docs.cloud.coinbase.com/advanced-trade-api/docs/ws-channels#level2-channel
+             *
              * @param {string[]} $symbols unified array of $symbols
              * @param {int} [$limit] the maximum amount of order book entries to return
              * @param {array} [$params] extra parameters specific to the exchange API endpoint
@@ -695,6 +750,26 @@ class coinbase extends \ccxt\async\coinbase {
         return $message;
     }
 
+    public function handle_heartbeats($client, $message) {
+        // although the subscription takes a product_ids parameter (i.e. symbol),
+        // there is no (clear) way of mapping the $message back to the symbol.
+        //
+        //     {
+        //         "channel" => "heartbeats",
+        //         "client_id" => "",
+        //         "timestamp" => "2023-06-23T20:31:26.122969572Z",
+        //         "sequence_num" => 0,
+        //         "events" => array(
+        //           {
+        //               "current_time" => "2023-06-23 20:31:56.121961769 +0000 UTC m=+91717.525857105",
+        //               "heartbeat_counter" => "3049"
+        //           }
+        //         )
+        //     }
+        //
+        return $message;
+    }
+
     public function handle_message($client, $message) {
         $channel = $this->safe_string($message, 'channel');
         $methods = array(
@@ -704,6 +779,7 @@ class coinbase extends \ccxt\async\coinbase {
             'market_trades' => array($this, 'handle_trade'),
             'user' => array($this, 'handle_order'),
             'l2_data' => array($this, 'handle_order_book'),
+            'heartbeats' => array($this, 'handle_heartbeats'),
         );
         $type = $this->safe_string($message, 'type');
         if ($type === 'error') {
@@ -711,6 +787,8 @@ class coinbase extends \ccxt\async\coinbase {
             throw new ExchangeError($errorMessage);
         }
         $method = $this->safe_value($methods, $channel);
-        $method($client, $message);
+        if ($method) {
+            $method($client, $message);
+        }
     }
 }

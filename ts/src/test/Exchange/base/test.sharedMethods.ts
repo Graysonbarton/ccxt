@@ -1,17 +1,24 @@
+/* eslint no-restricted-syntax: ["error", "FunctionExpression", "WithStatement"] */
+
 import assert from 'assert';
 import { Exchange } from "../../../../ccxt";
 import Precise from '../../../base/Precise.js';
 import { OnMaintenance, OperationFailed } from '../../../base/errors.js';
+import { Str } from '../../../base/types';
 
 function logTemplate (exchange: Exchange, method: string, entry: object) {
-    return ' <<< ' + exchange.id + ' ' + method + ' ::: ' + exchange.json (entry) + ' >>> ';
+    // there are cases when exchange is undefined (eg. base tests)
+    const id = (exchange !== undefined) ? exchange.id : 'undefined';
+    const methodString = (method !== undefined) ? method : 'undefined';
+    const entryString = (exchange !== undefined) ? exchange.json (entry) : '';
+    return ' <<< ' + id + ' ' + methodString + ' ::: ' + entryString + ' >>> ';
 }
 
-function isTemporaryFailure (e) {
+function isTemporaryFailure (e: any) {
     return (e instanceof OperationFailed) && (!(e instanceof OnMaintenance));
 }
 
-function stringValue (value) {
+function stringValue (value: any) {
     let stringVal = undefined;
     if (typeof value === 'string') {
         stringVal = value;
@@ -23,7 +30,7 @@ function stringValue (value) {
     return stringVal;
 }
 
-function assertType (exchange: Exchange, skippedProperties: object, entry: object, key, format) {
+function assertType (exchange: Exchange, skippedProperties: object, entry: object, key: string | number, format: object) {
     if (key in skippedProperties) {
         return undefined;
     }
@@ -39,7 +46,7 @@ function assertType (exchange: Exchange, skippedProperties: object, entry: objec
     return result;
 }
 
-function assertStructure (exchange: Exchange, skippedProperties: object, method: string, entry: object, format, emptyAllowedFor = []) {
+function assertStructure (exchange: Exchange, skippedProperties: object, method: string, entry: object, format: any[] | object, emptyAllowedFor: any [] = undefined, deep = false) {
     const logText = logTemplate (exchange, method, entry);
     assert (entry, 'item is null/undefined' + logText);
     // get all expected & predefined keys for this specific item and ensure thos ekeys exist in parsed structure
@@ -49,7 +56,7 @@ function assertStructure (exchange: Exchange, skippedProperties: object, method:
         const expectedLength = format.length;
         assert (realLength === expectedLength, 'entry length is not equal to expected length of ' + expectedLength.toString () + logText);
         for (let i = 0; i < format.length; i++) {
-            const emptyAllowedForThisKey = exchange.inArray (i, emptyAllowedFor);
+            const emptyAllowedForThisKey = (emptyAllowedFor === undefined) || exchange.inArray (i, emptyAllowedFor);
             const value = entry[i];
             if (i in skippedProperties) {
                 continue;
@@ -77,7 +84,7 @@ function assertStructure (exchange: Exchange, skippedProperties: object, method:
             if (key in skippedProperties) {
                 continue;
             }
-            const emptyAllowedForThisKey = exchange.inArray (key, emptyAllowedFor);
+            const emptyAllowedForThisKey = (emptyAllowedFor === undefined) || exchange.inArray (key, emptyAllowedFor);
             const value = entry[key];
             // check when:
             // - it's not inside "allowe empty values" list
@@ -91,12 +98,17 @@ function assertStructure (exchange: Exchange, skippedProperties: object, method:
             if (key !== 'info') {
                 const typeAssertion = assertType (exchange, skippedProperties, entry, key, format);
                 assert (typeAssertion, '"' + stringValue (key) + '" key is neither undefined, neither of expected type' + logText);
+                if (deep) {
+                    if (typeof value === 'object') {
+                        assertStructure (exchange, skippedProperties, method, value, format[key], emptyAllowedFor, deep);
+                    }
+                }
             }
         }
     }
 }
 
-function assertTimestamp (exchange: Exchange, skippedProperties: object, method: string, entry: object, nowToCheck: any = undefined, keyNameOrIndex : any = 'timestamp') {
+function assertTimestamp (exchange: Exchange, skippedProperties: object, method: string, entry: object, nowToCheck: any = undefined, keyNameOrIndex : string | number = 'timestamp') {
     const logText = logTemplate (exchange, method, entry);
     const skipValue = exchange.safeValue (skippedProperties, keyNameOrIndex);
     if (skipValue !== undefined) {
@@ -148,7 +160,7 @@ function assertTimestampAndDatetime (exchange: Exchange, skippedProperties: obje
     }
 }
 
-function assertCurrencyCode (exchange: Exchange, skippedProperties: object, method: string, entry: object, actualCode, expectedCode = undefined) {
+function assertCurrencyCode (exchange: Exchange, skippedProperties: object, method: string, entry: object, actualCode: Str, expectedCode: Str = undefined) {
     if (('currency' in skippedProperties) || ('currencyIdAndCode' in skippedProperties)) {
         return;
     }
@@ -181,7 +193,7 @@ function assertValidCurrencyIdAndCode (exchange: Exchange, skippedProperties: ob
     }
 }
 
-function assertSymbol (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, expectedSymbol = undefined) {
+function assertSymbol (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, expectedSymbol: Str = undefined) {
     if (key in skippedProperties) {
         return;
     }
@@ -203,7 +215,7 @@ function assertSymbolInMarkets (exchange: Exchange, skippedProperties: object, m
 }
 
 
-function assertGreater (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, compareTo) {
+function assertGreater (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, compareTo: string) {
     if (key in skippedProperties) {
         return;
     }
@@ -214,7 +226,7 @@ function assertGreater (exchange: Exchange, skippedProperties: object, method: s
     }
 }
 
-function assertGreaterOrEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, compareTo) {
+function assertGreaterOrEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, compareTo: string) {
     if (key in skippedProperties) {
         return;
     }
@@ -225,7 +237,7 @@ function assertGreaterOrEqual (exchange: Exchange, skippedProperties: object, me
     }
 }
 
-function assertLess (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, compareTo) {
+function assertLess (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, compareTo: string) {
     if (key in skippedProperties) {
         return;
     }
@@ -236,7 +248,7 @@ function assertLess (exchange: Exchange, skippedProperties: object, method: stri
     }
 }
 
-function assertLessOrEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, compareTo) {
+function assertLessOrEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, compareTo: string) {
     if (key in skippedProperties) {
         return;
     }
@@ -247,7 +259,7 @@ function assertLessOrEqual (exchange: Exchange, skippedProperties: object, metho
     }
 }
 
-function assertEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, compareTo) {
+function assertEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, compareTo: string) {
     if (key in skippedProperties) {
         return;
     }
@@ -258,7 +270,7 @@ function assertEqual (exchange: Exchange, skippedProperties: object, method: str
     }
 }
 
-function assertNonEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, compareTo) {
+function assertNonEqual (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, compareTo: string) {
     if (key in skippedProperties) {
         return;
     }
@@ -269,7 +281,7 @@ function assertNonEqual (exchange: Exchange, skippedProperties: object, method: 
     }
 }
 
-function assertInArray (exchange: Exchange, skippedProperties: object, method: string, entry: object, key, expectedArray) {
+function assertInArray (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number, expectedArray: any[]) {
     if (key in skippedProperties) {
         return;
     }
@@ -282,10 +294,11 @@ function assertInArray (exchange: Exchange, skippedProperties: object, method: s
     }
 }
 
-function assertFeeStructure (exchange: Exchange, skippedProperties: object, method: string, entry: object, key) {
+function assertFeeStructure (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number) {
     const logText = logTemplate (exchange, method, entry);
     const keyString = stringValue (key);
     if (Number.isInteger (key)) {
+        key = key as number;
         assert (Array.isArray (entry), 'fee container is expected to be an array' + logText);
         assert (key < entry.length, 'fee key ' + keyString + ' was expected to be present in entry' + logText);
     } else {
@@ -296,13 +309,18 @@ function assertFeeStructure (exchange: Exchange, skippedProperties: object, meth
     // todo: remove undefined check to make stricter
     if (feeObject !== undefined) {
         assert ('cost' in feeObject, keyString + ' fee object should contain "cost" key' + logText);
+        if (feeObject['cost'] === undefined) {
+            return; // todo: remove undefined check to make stricter
+        }
+        assert (typeof feeObject['cost'] === 'number', keyString + ' "cost" must be numeric type' + logText);
         // assertGreaterOrEqual (exchange, skippedProperties, method, feeObject, 'cost', '0'); // fee might be negative in the case of a rebate or reward
         assert ('currency' in feeObject, '"' + keyString + '" fee object should contain "currency" key' + logText);
         assertCurrencyCode (exchange, skippedProperties, method, entry, feeObject['currency']);
+
     }
 }
 
-function assertTimestampOrder (exchange: Exchange, method: string, codeOrSymbol: string, items, ascending = true) {
+function assertTimestampOrder (exchange: Exchange, method: string, codeOrSymbol: string, items: any[], ascending = true) {
     for (let i = 0; i < items.length; i++) {
         if (i > 0) {
             const currentTs = items[i - 1]['timestamp'];
@@ -316,7 +334,7 @@ function assertTimestampOrder (exchange: Exchange, method: string, codeOrSymbol:
     }
 }
 
-function assertInteger (exchange: Exchange, skippedProperties: object, method: string, entry: object, key) {
+function assertInteger (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number) {
     if (key in skippedProperties) {
         return;
     }
@@ -330,7 +348,7 @@ function assertInteger (exchange: Exchange, skippedProperties: object, method: s
     }
 }
 
-function checkPrecisionAccuracy (exchange: Exchange, skippedProperties: object, method: string, entry: object, key) {
+function checkPrecisionAccuracy (exchange: Exchange, skippedProperties: object, method: string, entry: object, key: string | number) {
     if (key in skippedProperties) {
         return;
     }
@@ -345,9 +363,156 @@ function checkPrecisionAccuracy (exchange: Exchange, skippedProperties: object, 
             assertNonEqual (exchange, skippedProperties, method, entry, key, numStr);
         }
     } else {
-        assertInteger (exchange, skippedProperties, method, entry, key); // should be integer
+        // todo: significant-digits return doubles from `this.parseNumber`, so for now can't assert against integer atm
+        // assertInteger (exchange, skippedProperties, method, entry, key); // should be integer
         assertLessOrEqual (exchange, skippedProperties, method, entry, key, '18'); // should be under 18 decimals
         assertGreaterOrEqual (exchange, skippedProperties, method, entry, key, '-8'); // in real-world cases, there would not be less than that
+    }
+}
+
+async function fetchBestBidAsk (exchange, method, symbol) {
+    const logText = logTemplate (exchange, method, {});
+    // find out best bid/ask price
+    let bestBid = undefined;
+    let bestAsk = undefined;
+
+    let usedMethod = undefined;
+    if (exchange.has['fetchOrderBook']) {
+        usedMethod = 'fetchOrderBook';
+        const orderbook = await exchange.fetchOrderBook (symbol);
+        const bids = exchange.safeList (orderbook, 'bids');
+        const asks = exchange.safeList (orderbook, 'asks');
+        const bestBidArray = exchange.safeList (bids, 0);
+        const bestAskArray = exchange.safeList (asks, 0);
+        bestBid = exchange.safeNumber (bestBidArray, 0);
+        bestAsk = exchange.safeNumber (bestAskArray, 0);
+    } else if (exchange.has['fetchBidsAsks']) {
+        usedMethod = 'fetchBidsAsks';
+        const tickers = await exchange.fetchBidsAsks ([ symbol ]);
+        const ticker = exchange.safeDict (tickers, symbol);
+        bestBid = exchange.safeNumber (ticker, 'bid');
+        bestAsk = exchange.safeNumber (ticker, 'ask');
+    } else if (exchange.has['fetchTicker']) {
+        usedMethod = 'fetchTicker';
+        const ticker = await exchange.fetchTicker (symbol);
+        bestBid = exchange.safeNumber (ticker, 'bid');
+        bestAsk = exchange.safeNumber (ticker, 'ask');
+    } else if (exchange.has['fetchTickers']) {
+        usedMethod = 'fetchTickers';
+        const tickers = await exchange.fetchTickers ([ symbol ]);
+        const ticker = exchange.safeDict (tickers, symbol);
+        bestBid = exchange.safeNumber (ticker, 'bid');
+        bestAsk = exchange.safeNumber (ticker, 'ask');
+    }
+    //
+    assert (bestBid !== undefined && bestAsk !== undefined, logText + ' ' +  exchange.id + ' could not get best bid/ask for ' + symbol + ' using ' + usedMethod + ' while testing ' + method);
+    return [ bestBid, bestAsk ];
+}
+
+async function fetchOrder (exchange, symbol, orderId, skippedProperties) {
+    let fetchedOrder = undefined;
+    const originalId = orderId;
+    // set 'since' to 5 minute ago for optimal results
+    const sinceTime = exchange.milliseconds () - 1000 * 60 * 5;
+    // iterate
+    const methods_singular = [ 'fetchOrder', 'fetchOpenOrder', 'fetchClosedOrder', 'fetchCanceledOrder' ];
+    for (let i = 0; i < methods_singular.length; i++) {
+        const singularFetchName = methods_singular[i];
+        if (exchange.has[singularFetchName]) {
+            const currentOrder = await exchange[singularFetchName] (originalId, symbol);
+            // if there is an id inside the order, it means the order was fetched successfully
+            if (currentOrder['id'] === originalId) {
+                fetchedOrder = currentOrder;
+                break;
+            }
+        }
+    }
+    //
+    // search through plural methods
+    if (fetchedOrder === undefined) {
+        const methods_plural = [ 'fetchOrders', 'fetchOpenOrders', 'fetchClosedOrders', 'fetchCanceledOrders' ];
+        for (let i = 0; i < methods_plural.length; i++) {
+            const pluralFetchName = methods_plural[i];
+            if (exchange.has[pluralFetchName]) {
+                const orders = await exchange[pluralFetchName] (symbol, sinceTime);
+                let found = false;
+                for (let j = 0; j < orders.length; j++) {
+                    const currentOrder = orders[j];
+                    if (currentOrder['id'] === originalId) {
+                        fetchedOrder = currentOrder;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    break;
+                }
+            }
+        }
+    }
+    return fetchedOrder;
+}
+
+function assertOrderState (exchange, skippedProperties, method, order, assertedStatus, strictCheck) {
+    // note, `strictCheck` is `true` only from "fetchOrder" cases
+    const logText = logTemplate (exchange, method, order);
+    const msg = 'order should be ' + assertedStatus + ', but it was not asserted' + logText;
+    const filled = exchange.safeString (order, 'filled');
+    const amount = exchange.safeString (order, 'amount');
+    // shorthand variables
+    const statusUndefined = (order['status'] === undefined);
+    const statusOpen = (order['status'] === 'open');
+    const statusClosed = (order['status'] === 'closed');
+    const statusClanceled = (order['status'] === 'canceled');
+    const filledDefined = (filled !== undefined);
+    const amountDefined = (amount !== undefined);
+    let condition = undefined;
+    //
+    // ### OPEN STATUS
+    //
+    // if strict check, then 'status' must be 'open' and filled amount should be less then whole order amount
+    const strictOpen = statusOpen && (filledDefined && amountDefined && filled < amount);
+    // if non-strict check, then accept & ignore undefined values
+    const nonstrictOpen = (statusOpen || statusUndefined) && ((!filledDefined || !amountDefined) || Precise.stringLt (filled, amount));
+    // check
+    if (assertedStatus === 'open') {
+        condition = strictCheck ? strictOpen : nonstrictOpen;
+        assert (condition, msg);
+        return;
+    }
+    //
+    // ### CLOSED STATUS
+    //
+    // if strict check, then 'status' must be 'closed' and filled amount should be equal to the whole order amount
+    const closedStrict = statusClosed && (filledDefined && amountDefined && Precise.stringEq (filled, amount));
+    // if non-strict check, then accept & ignore undefined values
+    const closedNonStrict = (statusClosed || statusUndefined) && ((!filledDefined || !amountDefined) || Precise.stringEq (filled, amount));
+    // check
+    if (assertedStatus === 'closed') {
+        condition = strictCheck ? closedStrict : closedNonStrict;
+        assert (condition, msg);
+        return;
+    }
+    //
+    // ### CANCELED STATUS
+    //
+    // if strict check, then 'status' must be 'canceled' and filled amount should be less then whole order amount
+    const canceledStrict = statusClanceled && (filledDefined && amountDefined && Precise.stringLt (filled, amount));
+    // if non-strict check, then accept & ignore undefined values
+    const canceledNonStrict = (statusClanceled || statusUndefined) && ((!filledDefined || !amountDefined) || Precise.stringLt (filled, amount));
+    // check
+    if (assertedStatus === 'canceled') {
+        condition = strictCheck ? canceledStrict : canceledNonStrict;
+        assert (condition, msg);
+        return;
+    }
+    //
+    // ### CLOSED_or_CANCELED STATUS
+    //
+    if (assertedStatus === 'closed_or_canceled') {
+        condition = strictCheck ? (closedStrict || canceledStrict) : (closedNonStrict || canceledNonStrict);
+        assert (condition, msg);
+        return;
     }
 }
 
@@ -366,14 +531,14 @@ function removeProxyOptions (exchange: Exchange, skippedProperties: object) {
     return [ proxyUrl, httpProxy, httpsProxy, socksProxy ];
 }
 
-function setProxyOptions (exchange: Exchange, skippedProperties: object, proxyUrl, httpProxy, httpsProxy, socksProxy) {
+function setProxyOptions (exchange: Exchange, skippedProperties: object, proxyUrl: string, httpProxy: string, httpsProxy: string, socksProxy: string) {
     exchange.proxyUrl = proxyUrl;
     exchange.httpProxy = httpProxy;
     exchange.httpsProxy = httpsProxy;
     exchange.socksProxy = socksProxy;
 }
 
-function assertNonEmtpyArray (exchange, skippedProperties, method, entry, hint = undefined) {
+function assertNonEmtpyArray (exchange: Exchange, skippedProperties: object, method: string, entry: any[] | object, hint: Str = undefined) {
     let logText = logTemplate (exchange, method, entry);
     if (hint !== undefined) {
         logText = logText + ' ' + hint;
@@ -385,7 +550,7 @@ function assertNonEmtpyArray (exchange, skippedProperties, method, entry, hint =
     assert (entry.length > 0, 'response is expected to be a non-empty array' + logText + ' (add "emptyResponse" in skip-tests.json to skip this check)');
 }
 
-function assertRoundMinuteTimestamp (exchange, skippedProperties, method, entry, key) {
+function assertRoundMinuteTimestamp (exchange: Exchange, skippedProperties: object, method: string, entry: any[] | object, key: string | number) {
     if (key in skippedProperties) {
         return;
     }
@@ -394,7 +559,18 @@ function assertRoundMinuteTimestamp (exchange, skippedProperties, method, entry,
     assert (Precise.stringMod (ts, '60000') === '0', 'timestamp should be a multiple of 60 seconds (1 minute)' + logText);
 }
 
+function deepEqual (a: any, b: any) {
+    return JSON.stringify (a) === JSON.stringify (b);
+}
+
+function assertDeepEqual (exchange: Exchange, skippedProperties: any, method: string, a: any, b: any) {
+    const logText = logTemplate (exchange, method, {});
+    assert (deepEqual (a, b), 'two dicts do not match: ' + JSON.stringify (a) + ' != ' + JSON.stringify (b) + logText);
+}
+
 export default {
+    deepEqual,
+    assertDeepEqual,
     logTemplate,
     isTemporaryFailure,
     assertTimestamp,
@@ -414,6 +590,9 @@ export default {
     assertNonEqual,
     assertInteger,
     checkPrecisionAccuracy,
+    fetchBestBidAsk,
+    fetchOrder,
+    assertOrderState,
     assertValidCurrencyIdAndCode,
     assertType,
     removeProxyOptions,
